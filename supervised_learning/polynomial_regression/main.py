@@ -20,7 +20,7 @@ def polynomial_regression(x, y, degree, alpha, epoch, mode=0, lambda_=0.01):
         loss = (error ** 2).mean()
         losses.append(loss)
         
-        if (iter % (epoch/10) == 0): print(f"Epoch {iter}: {loss:.4f}")
+        # if (iter % (epoch/10) == 0): print(f"Epoch {iter}: {loss:.4f}")
         
         gradient_w = -2/len(x) * (x_poly.T @ error)
         gradient_b = -2/len(x) * error.sum()
@@ -39,30 +39,69 @@ def polynomial_regression(x, y, degree, alpha, epoch, mode=0, lambda_=0.01):
         
     return w,b,losses
 
+def min_max_scale(x):
+    return (x - np.min(x)) / (np.max(x)-np.min(x))
+
 np.random.seed(42)
 
-n_samples = 1000
-epochs = 100000
-alpha = 0.0001
+n_samples = 10000
+epochs = 1000
+alpha = 0.001
 
-true_weights = np.array([2.2, -3.1, 5.1, 0.4]) # coefficients of the fn, least significant first
+true_weights = np.array([2.2, -3.1, 4.1, 9.7, -2.3, 8]) # coefficients of the fn, least significant first
 true_bias = 5.0 # constant term 
 poly_deg = len(true_weights)
 
-x = np.linspace(-3, 3, n_samples) # uniform distribution of samples from [left, right]
+x = np.linspace(-100, 100, n_samples) # uniform distribution of samples from [left, right]
+x = min_max_scale(x)
 x_poly = create_poly(x, poly_deg)
 
 y = fn(x_poly, true_weights, true_bias) # apply fn(x)
-y_noisy = y + np.random.randn(n_samples) * 2 # gaussian noise, mean 0, sdev 1 * [scale]
+y_noisy = y + np.random.randn(n_samples) * 4 # gaussian noise, mean 0, sdev 1 * [scale]
 
-new_w, new_b, losses = polynomial_regression(x,y_noisy,poly_deg,alpha,epochs,mode=1,lambda_=0.02)
+w_l1, b_l1, losses_l1 = polynomial_regression(x,y_noisy,poly_deg,alpha,epochs,mode=1,lambda_=0.1)
+w_l2, b_l2, losses_l2 = polynomial_regression(x,y_noisy,poly_deg,alpha,epochs,mode=2,lambda_=0.1)
+w_l3, b_l3, losses_l3 = polynomial_regression(x,y_noisy,poly_deg,alpha,epochs,mode=3,lambda_=0.1)
 
-print(f"Predicted Weights: {new_w}, Predicted Intercept: {new_b}")
+def plot_losses(losses_l1,losses_l2,losses_l3):
+    plt.plot(losses_l1, color="red", label="L1")
+    plt.plot(losses_l2, color="green", label="L2")
+    plt.plot(losses_l3, color="blue", label="Elastic")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss (log scale)")
+    plt.yscale('log')
+    plt.legend()
+    plt.show()
+
+def plot_all_models(x, y_actual, y_noisy, preds_dict):
+    plt.figure(figsize=(10, 6))
+    plt.scatter(x, y_noisy, s=0.15, alpha=0.5, label='Noisy Data')  # scatter of noisy points
+    plt.plot(x, y_actual, color='black', linewidth=2, label='True Function')  # true function
+    for label, y_pred in preds_dict.items():
+        plt.plot(x, y_pred, linewidth=2, label=label)  # each regression line
+    plt.legend()
+    plt.title("Polynomial Regression: True Function vs L1, L2, Elastic Net")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.show()
+    
+print(f"Predicted Weights (l1): {w_l1}, Predicted Intercept: {b_l1}")
+print(f"Predicted Weights (l2): {w_l2}, Predicted Intercept: {b_l2}")
+print(f"Predicted Weights (Elastic): {w_l3}, Predicted Intercept: {b_l3}")
 print(f"Actual Weights: {true_weights}, Actual Intercept: {true_bias}")
+print(f"L1 losses: {losses_l1[-1]}")
+print(f"L2 losses: {losses_l2[-1]}")
+print(f"Elastic losses: {losses_l3[-1]}")
 
-y_regress = fn(x_poly, new_w, new_b)
+y_regress_l1 = fn(x_poly, w_l1, b_l1)
+y_regress_l2 = fn(x_poly, w_l2, b_l2)
+y_regress_l3 = fn(x_poly, w_l3, b_l3)
 
-plt.scatter(x, y_noisy, s=0.15) 
-plt.plot(x, y, color='red', linewidth=2) # true fn
-plt.plot(x, y_regress, color='green', linewidth=2) # predicted fn
-plt.show()
+predictions = {
+    "L1 (Lasso)": y_regress_l1,
+    "L2 (Ridge)": y_regress_l2,
+    "Elastic Net": y_regress_l3
+}
+
+plot_losses(losses_l1, losses_l2, losses_l3)
+plot_all_models(x, y, y_noisy, predictions)
